@@ -1,0 +1,2 @@
+import {NextResponse} from 'next/server';import {loadSettings} from '../../../../lib/server/db';
+export async function GET(){try{const s=await loadSettings();if(!s.enabled)return NextResponse.json({enabled:false},{headers:{'Cache-Control':'no-store','Access-Control-Allow-Origin':'*'}});return NextResponse.json(s,{headers:{'Cache-Control':'public,max-age=0,s-maxage=30','Access-Control-Allow-Origin':'*'}})}catch(e){console.error(e);return NextResponse.json({enabled:false},{status:503,headers:{'Cache-Control':'no-store','Access-Control-Allow-Origin':'*'}})}}
