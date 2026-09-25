@@ -53,7 +53,7 @@
         const timer=seconds>=3600?`${Math.floor(seconds/3600)}h ${pad(Math.floor((seconds%3600)/60))}m`:`${pad(Math.floor(seconds/60))}:${pad(seconds%60)}`;
         title.textContent=cfg.free?'Llega gratis hoy':'Llega hoy';sub.textContent='Comprando dentro de los próximos ';
         const clock=document.createElement('b');clock.className='lh4-clock';clock.textContent=timer;clock.style.color=color;sub.append(clock);
-        card.style.background=urgent?'#fff8f8':(cfg.bg||'#f7fffb');card.style.borderColor=urgent?'#ffc8ce':'#bfe8d6';icon.style.color=color;
+        card.style.background=cfg.bg||'#F7FFFB';card.style.borderColor=urgent?(cfg.urgent||'#D92332'):(cfg.accent||'#09934F');icon.style.color=cfg.accent||'#09934F';arrow.style.color=cfg.accent||'#09934F';
         return;
       }
       let next=null;
@@ -62,7 +62,7 @@
       const tomorrow=next.distance===1;
       title.textContent=tomorrow?'Llega mañana':`Llega el ${formatNext(next.date)}`;
       sub.textContent=tomorrow?'Comprando ahora, tu pedido llega mañana.':`Comprando ahora, tu pedido llega el ${formatNext(next.date)}.`;
-      card.style.background='#fafafc';card.style.borderColor='#e1e4e8';icon.style.color='#87939b';
+      card.style.background=cfg.bg||'#F7FFFB';card.style.borderColor=cfg.accent||'#09934F';icon.style.color=cfg.accent||'#09934F';arrow.style.color=cfg.accent||'#09934F';
     }
     render();const id=setInterval(render,1000);window.addEventListener('pagehide',()=>clearInterval(id),{once:true});
   }
