@@ -4,9 +4,7 @@
   if (window.__lhSoldCountsV2) return;
   window.__lhSoldCountsV2 = true;
   const API = 'https://llega-hoy-widget.vercel.app/api/public/sold-counts';
-  const steps = [10,25,50,100,250,500,1000,2500,5000,10000,25000,50000,100000];
-  const format = n => new Intl.NumberFormat('es-AR').format(n);
-  const floor = n => steps.filter(x => x <= n).pop() || 0;
+    const format = n => new Intl.NumberFormat('es-AR').format(n);
   const css = document.createElement('style');
   css.textContent = '.lh-sold-count{display:block;font:400 11px/1.5 inherit;color:#777;margin:4px 0 5px}.lh-sold-count::before{content:"↗";margin-right:4px}';
   (document.head || document.documentElement).appendChild(css);
@@ -46,7 +44,7 @@
       if (!count || count < 10) { if (old) old.remove(); continue; }
       const anchor = deliveryAnchor(card);
       if (!anchor || !anchor.parentElement) continue;
-      const value = '+' + format(floor(count)) + ' vendidos';
+      const value = '+' + format(count) + ' vendidos';
       if (old) { old.textContent = value; if (old.nextElementSibling !== anchor) anchor.before(old); continue; }
       const badge = document.createElement('div');
       badge.className = 'lh-sold-count';
