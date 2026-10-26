@@ -1,5 +1,6 @@
 
-/* Llega Hoy - contadores manuales v3.1 */
+/* Llega Hoy - contadores manuales v4.
+   Independiente del widget de entregas. */
 (function () {
   'use strict';
 
@@ -9,8 +10,14 @@
   const API = 'https://llega-hoy-widget.vercel.app/api/public/sold-counts';
   const format = n => new Intl.NumberFormat('es-AR').format(n);
 
-  const css = document.createElement('style');
-  css.textContent = `
+  const byId = new Map();
+  const byHandle = new Map();
+
+  let observer;
+  let queued = false;
+
+  const style = document.createElement('style');
+  style.textContent = `
     .lh-sold-count {
       display: block;
       font-size: 11px;
@@ -23,47 +30,49 @@
       content: none !important;
     }
   `;
-  (document.head || document.documentElement).appendChild(css);
+  (document.head || document.documentElement).appendChild(style);
 
-  const byId = new Map();
-  const byHandle = new Map();
-
-  let queued = false;
-  let observer = null;
-
-  function normalizeHandle(value) {
+  function handleFrom(value) {
     if (!value) return '';
 
-    const text = String(value).trim();
-
     try {
-      const url = new URL(text, location.origin);
-      const match = url.pathname.match(/\/productos\/([^/?#]+)/i);
-      if (match) return decodeURIComponent(match[1]).toLowerCase();
+      const url = new URL(String(value), location.origin);
+      const match = url.pathname.match(/\/productos\/([^/]+)/i);
+
+      if (match) {
+        return decodeURIComponent(match[1]).toLowerCase();
+      }
     } catch (_) {}
 
-    return text.replace(/^\/+|\/+$/g, '').toLowerCase();
+    return String(value)
+      .replace(/^\/+|\/+$/g, '')
+      .toLowerCase();
   }
 
-  function getCount(card) {
-    const elements = card.querySelectorAll(
-      '[data-store^="product-item-info-"],' +
-      '[data-store^="product-item-"]'
+  function countFor(card) {
+    const ids = [card.getAttribute('data-product-id')];
+
+    const nested = card.querySelector(
+      '[data-product-id], [data-store^="product-item-info-"]'
     );
 
-    for (const element of elements) {
-      const value = element.getAttribute('data-store') || '';
-      const match = value.match(/product-item(?:-info)?-(\d+)/);
+    if (nested) {
+      ids.push(nested.getAttribute('data-product-id'));
 
-      if (match && byId.has(match[1])) {
-        return byId.get(match[1]);
+      const store = nested.getAttribute('data-store') || '';
+      const match = store.match(/^product-item-info-(\d+)$/);
+
+      if (match) ids.push(match[1]);
+    }
+
+    for (const id of ids) {
+      if (id && byId.has(String(id))) {
+        return byId.get(String(id));
       }
     }
 
-    const links = card.querySelectorAll('a[href*="/productos/"]');
-
-    for (const link of links) {
-      const handle = normalizeHandle(link.getAttribute('href'));
+    for (const link of card.querySelectorAll('a[href*="/productos/"]')) {
+      const handle = handleFrom(link.getAttribute('href'));
 
       if (byHandle.has(handle)) {
         return byHandle.get(handle);
@@ -73,89 +82,61 @@
     return null;
   }
 
-  function getDeliveryAnchor(card) {
-    const label = Array.from(
-      card.querySelectorAll('.lh-grid-label')
-    ).find(el =>
-      /Llega hoy|Llega mañana/i.test(el.textContent || '')
+  function cards() {
+    const all = document.querySelectorAll(
+      '.js-item-product[data-product-id], .js-product-container'
     );
 
-    if (!label) return null;
-
-    const description = card.querySelector('.js-item-description');
-
-    let anchor = label;
-
-    // Subir únicamente por los contenedores del badge.
-    while (anchor.parentElement) {
-      const parent = anchor.parentElement;
-
-      if (
-        parent === card ||
-        parent === description ||
-        parent.classList.contains('js-item-description')
-      ) {
-        break;
-      }
-
-      const className =
-        typeof parent.className === 'string'
-          ? parent.className
-          : '';
-
-      const isBadgeWrapper =
-        className.includes('lh-grid') ||
-        parent.children.length === 1;
-
-      if (!isBadgeWrapper) break;
-
-      anchor = parent;
-    }
-
-    return anchor;
+    return Array.from(all).filter(card =>
+      !card.parentElement?.closest(
+        '.js-item-product[data-product-id], .js-product-container'
+      )
+    );
   }
 
   function render() {
     if (observer) observer.disconnect();
 
     try {
-      const cards = document.querySelectorAll('.js-product-container');
-
-      for (const card of cards) {
-        const count = getCount(card);
-        let badge = card.querySelector('.lh-sold-count');
+      for (const card of cards()) {
+        const count = countFor(card);
+        const old = card.querySelector('.lh-sold-count');
 
         if (!Number.isSafeInteger(count) || count < 10) {
-          if (badge) badge.remove();
+          if (old) old.remove();
           continue;
+        }
+
+        // Buscar el contenedor REAL del cartel de entrega.
+        // No importa qué texto tenga.
+        const delivery =
+          card.querySelector('.lh-grid:has(.lh-grid-label)') ||
+          card.querySelector('.lh-grid');
+
+        // No borrar un contador válido si el cartel
+        // todavía no terminó de cargar.
+        if (!delivery || !delivery.parentElement) {
+          continue;
+        }
+
+        const badge = old || document.createElement('div');
+
+        if (!old) {
+          badge.className = 'lh-sold-count';
         }
 
         const value = '+' + format(count) + ' vendidos';
-
-        // Única ubicación permitida: arriba del badge verde.
-        const anchor = getDeliveryAnchor(card);
-
-        if (!anchor || !anchor.parentElement) {
-          // No colocar el contador en otra posición.
-          // Se reintentará cuando aparezca el badge.
-          if (badge) badge.remove();
-          continue;
-        }
-
-        if (!badge) {
-          badge = document.createElement('div');
-          badge.className = 'lh-sold-count';
-        }
 
         if (badge.textContent !== value) {
           badge.textContent = value;
         }
 
+        // Posición única: inmediatamente arriba de .lh-grid
         if (
-          badge.parentElement !== anchor.parentElement ||
-          badge.nextElementSibling !== anchor
+          badge.parentElement !== delivery.parentElement ||
+          badge.nextElementSibling !== delivery
         ) {
-          anchor.before(badge);
+          delivery.before(badge);
         }
       }
     } finally {
@@ -179,7 +160,7 @@
     });
   }
 
-  async function loadCounts() {
+  async function start() {
     try {
       const response = await fetch(API, {
         mode: 'cors',
@@ -205,30 +186,25 @@
 
         if (product.handle) {
           byHandle.set(
-            normalizeHandle(product.handle),
+            handleFrom(product.handle),
             count
           );
         }
       }
 
       observer = new MutationObserver(schedule);
-
-      observer.observe(document.body, {
-        childList: true,
-        subtree: true
-      });
-
       schedule();
-    } catch (error) {
-      console.warn('[Llega Hoy vendidos]', error);
+
+    } catch (err) {
+      console.warn('[Llega Hoy vendidos]', err);
     }
   }
 
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', loadCounts, {
+    document.addEventListener('DOMContentLoaded', start, {
       once: true
     });
   } else {
-    loadCounts();
+    start();
   }
 })();
