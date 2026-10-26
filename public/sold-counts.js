@@ -1,23 +1,15 @@
 
-/*
- * Llega Hoy - Contadores manuales v3
- * Independiente del widget de entregas.
- * Cantidades exactas, sin emojis.
- */
+/* Llega Hoy - contadores manuales v3.1 */
 (function () {
   'use strict';
 
   if (window.__lhSoldCountsV2) return;
   window.__lhSoldCountsV2 = true;
 
-  const API =
-    'https://llega-hoy-widget.vercel.app/api/public/sold-counts';
-
-  const MIN_COUNT = 10;
+  const API = 'https://llega-hoy-widget.vercel.app/api/public/sold-counts';
   const format = n => new Intl.NumberFormat('es-AR').format(n);
 
   const css = document.createElement('style');
-
   css.textContent = `
     .lh-sold-count {
       display: block;
@@ -31,7 +23,6 @@
       content: none !important;
     }
   `;
-
   (document.head || document.documentElement).appendChild(css);
 
   const byId = new Map();
@@ -43,48 +34,30 @@
   function normalizeHandle(value) {
     if (!value) return '';
 
-    let text = String(value).trim();
+    const text = String(value).trim();
 
     try {
       const url = new URL(text, location.origin);
       const match = url.pathname.match(/\/productos\/([^/?#]+)/i);
-
-      if (match) text = match[1];
+      if (match) return decodeURIComponent(match[1]).toLowerCase();
     } catch (_) {}
 
-    return decodeURIComponent(text)
-      .replace(/^\/+|\/+$/g, '')
-      .split(/[?#]/)[0]
-      .toLowerCase();
-  }
-
-  function getProductId(card) {
-    const selectors = [
-      '[data-store^="product-item-info-"]',
-      '[data-store^="product-item-"]'
-    ];
-
-    for (const selector of selectors) {
-      const element = card.querySelector(selector);
-      const value = element?.getAttribute('data-store') || '';
-      const match = value.match(/product-item(?:-info)?-(\d+)/);
-
-      if (match) return match[1];
-    }
-
-    const cardStore = card.getAttribute('data-store') || '';
-    const cardMatch = cardStore.match(/product-item(?:-info)?-(\d+)/);
-
-    if (cardMatch) return cardMatch[1];
-
-    return null;
+    return text.replace(/^\/+|\/+$/g, '').toLowerCase();
   }
 
   function getCount(card) {
-    const id = getProductId(card);
+    const elements = card.querySelectorAll(
+      '[data-store^="product-item-info-"],' +
+      '[data-store^="product-item-"]'
+    );
 
-    if (id && byId.has(id)) {
-      return byId.get(id);
+    for (const element of elements) {
+      const value = element.getAttribute('data-store') || '';
+      const match = value.match(/product-item(?:-info)?-(\d+)/);
+
+      if (match && byId.has(match[1])) {
+        return byId.get(match[1]);
+      }
     }
 
     const links = card.querySelectorAll('a[href*="/productos/"]');
@@ -100,7 +73,7 @@
     return null;
   }
 
-  function deliveryAnchor(card) {
+  function getDeliveryAnchor(card) {
     const label = Array.from(
       card.querySelectorAll('.lh-grid-label')
     ).find(el =>
@@ -109,85 +82,37 @@
 
     if (!label) return null;
 
-    let node = label;
-
-    while (node.parentElement && node.parentElement !== card) {
-      const parent = node.parentElement;
-
-      if (parent.querySelectorAll('.lh-grid-label').length > 1) {
-        break;
-      }
-
-      if (
-        parent.children.length > 1 &&
-        parent.querySelector('[class*="lh-grid"]')
-      ) {
-        node = parent;
-        break;
-      }
-
-      node = parent;
-
-      if (node.classList.contains('js-item-description')) {
-        break;
-      }
-    }
-
-    if (node.classList.contains('js-item-description')) {
-      node = label;
-
-      const description = card.querySelector('.js-item-description');
-
-      while (
-        node.parentElement &&
-        node.parentElement !== card &&
-        node.parentElement !== description
-      ) {
-        node = node.parentElement;
-      }
-    }
-
-    return node;
-  }
-
-  function fallbackAnchor(card) {
     const description = card.querySelector('.js-item-description');
 
-    if (!description) return null;
+    let anchor = label;
 
-    const price = description.querySelector(
-      '.js-price-display, .js-price-container, [data-store*="price"]'
-    );
+    // Subir únicamente por los contenedores del badge.
+    while (anchor.parentElement) {
+      const parent = anchor.parentElement;
 
-    if (price) {
-      return { element: price, position: 'after' };
-    }
-
-    return { element: description, position: 'append' };
-  }
-
-  function placeBadge(card, badge) {
-    const delivery = deliveryAnchor(card);
-
-    if (delivery && delivery.parentElement) {
-      if (badge.nextElementSibling !== delivery) {
-        delivery.before(badge);
+      if (
+        parent === card ||
+        parent === description ||
+        parent.classList.contains('js-item-description')
+      ) {
+        break;
       }
 
-      return;
+      const className =
+        typeof parent.className === 'string'
+          ? parent.className
+          : '';
+
+      const isBadgeWrapper =
+        className.includes('lh-grid') ||
+        parent.children.length === 1;
+
+      if (!isBadgeWrapper) break;
+
+      anchor = parent;
     }
 
-    const fallback = fallbackAnchor(card);
-
-    if (!fallback) return;
-
-    if (fallback.position === 'after') {
-      if (badge.previousElementSibling !== fallback.element) {
-        fallback.element.after(badge);
-      }
-    } else if (badge.parentElement !== fallback.element) {
-      fallback.element.appendChild(badge);
-    }
+    return anchor;
   }
 
   function render() {
@@ -200,23 +125,38 @@
         const count = getCount(card);
         let badge = card.querySelector('.lh-sold-count');
 
-        if (!Number.isSafeInteger(count) || count < MIN_COUNT) {
+        if (!Number.isSafeInteger(count) || count < 10) {
           if (badge) badge.remove();
           continue;
         }
 
-        const text = '+' + format(count) + ' vendidos';
+        const value = '+' + format(count) + ' vendidos';
+
+        // Única ubicación permitida: arriba del badge verde.
+        const anchor = getDeliveryAnchor(card);
+
+        if (!anchor || !anchor.parentElement) {
+          // No colocar el contador en otra posición.
+          // Se reintentará cuando aparezca el badge.
+          if (badge) badge.remove();
+          continue;
+        }
 
         if (!badge) {
           badge = document.createElement('div');
           badge.className = 'lh-sold-count';
         }
 
-        if (badge.textContent !== text) {
-          badge.textContent = text;
+        if (badge.textContent !== value) {
+          badge.textContent = value;
         }
 
-        placeBadge(card, badge);
+        if (
+          badge.parentElement !== anchor.parentElement ||
+          badge.nextElementSibling !== anchor
+        ) {
+          anchor.before(badge);
+        }
       }
     } finally {
       if (observer && document.body) {
@@ -252,13 +192,10 @@
 
       const data = await response.json();
 
-      byId.clear();
-      byHandle.clear();
-
       for (const product of data.products || []) {
         const count = Number(product.count);
 
-        if (!Number.isSafeInteger(count) || count < MIN_COUNT) {
+        if (!Number.isSafeInteger(count) || count < 10) {
           continue;
         }
 
@@ -276,15 +213,12 @@
 
       observer = new MutationObserver(schedule);
 
-      if (document.body) {
-        observer.observe(document.body, {
-          childList: true,
-          subtree: true
-        });
-      }
+      observer.observe(document.body, {
+        childList: true,
+        subtree: true
+      });
 
       schedule();
-
     } catch (error) {
       console.warn('[Llega Hoy vendidos]', error);
     }
