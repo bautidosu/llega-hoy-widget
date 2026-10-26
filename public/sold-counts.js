@@ -1,0 +1,13 @@
+/* Llega Hoy · contadores manuales. Script independiente del widget de entregas. */
+(function(){'use strict';if(window.__lhSoldCounts)return;window.__lhSoldCounts=true;
+const script=document.currentScript;const api=script?.getAttribute('data-api')||(script?.src?new URL('/api/public/sold-counts',script.src).href:'');if(!api)return;
+const floors=[10,25,50,100,250,500,1000,2500,5000,10000,25000,50000,100000];
+const fmt=n=>new Intl.NumberFormat('es-AR').format(n);
+const threshold=n=>floors.filter(x=>x<=n).pop()||0;
+const style=document.createElement('style');style.textContent='.lh-sold-count{display:block;font-size:11px;line-height:1.5;font-weight:400;font-family:inherit;color:#777;margin:3px 0 5px}.lh-sold-count::before{content:"↗";margin-right:4px}';document.head.appendChild(style);
+let counts=new Map();
+function cards(){return document.querySelectorAll('[data-store="product-item"], .js-item-product, .item-product, .product-item');}
+function productId(card){const a=card.getAttribute('data-product-id')||card.querySelector('[data-product-id]')?.getAttribute('data-product-id');if(a&&/^\d+$/.test(a))return a;const link=card.querySelector('a[href]');if(!link)return null;try{const path=new URL(link.href,location.href).pathname.replace(/\/+$/,'');return 'path:'+path}catch{return null}}
+function render(){for(const card of cards()){if(card.querySelector('.lh-sold-count'))continue;const id=productId(card);const count=counts.get(id)||([...counts.entries()].find(([key])=>key.startsWith('handle:')&&id?.startsWith('path:')&&(id.slice(5).endsWith('/'+key.slice(7))||id.slice(5)==='/'+key.slice(7)))||[])[1];if(!count)continue;const price=card.querySelector('.js-price-container, [data-store="product-item-price"], .item-price-container, .item-price, .js-price-display');const delivery=card.querySelector('.lh4, [data-llega-hoy], .lh-delivery, .llega-hoy, [class*="llega-hoy"]');const anchor=delivery||price;if(!anchor||!anchor.parentElement)continue;const badge=document.createElement('span');badge.className='lh-sold-count';badge.textContent=`+${fmt(threshold(count))} vendidos`;if(delivery)delivery.before(badge);else price.after(badge);}}
+fetch(api,{mode:'cors'}).then(r=>r.ok?r.json():{products:[]}).then(data=>{for(const p of data.products||[]){if(!Number.isSafeInteger(p.count)||p.count<10)continue;counts.set(String(p.id),p.count);if(p.handle){try{counts.set('handle:'+String(p.handle).replace(/^\/+|\/+$/g,''),p.count)}catch{}}}render();const observer=new MutationObserver(()=>{if(!document.querySelector('.lh-sold-count-pending')){requestAnimationFrame(render)}});observer.observe(document.body,{childList:true,subtree:true});}).catch(()=>{});
+})();
